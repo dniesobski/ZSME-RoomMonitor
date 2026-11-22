@@ -22,10 +22,10 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 data class AppPreferences(
     val timetableUrl: String = SettingsDataStore.DEFAULT_TIMETABLE_URL,
     val substitutionsUrl: String = SettingsDataStore.DEFAULT_SUBSTITUTIONS_URL,
-    val autoRefreshMinutes: Int = 5,
+    val autoRefreshMinutes: Int = SettingsDataStore.DEFAULT_AUTO_REFRESH_MINUTES,
     val cleanedRoomsForToday: Set<String> = emptySet(),
     val floorLevels: List<FloorLevelConfig> = SettingsDataStore.DEFAULT_FLOOR_LEVELS,
-    val githubRepo: String = "",
+    val githubRepo: String = SettingsDataStore.DEFAULT_GITHUB_REPO,
     val autoCheckUpdates: Boolean = true
 )
 
@@ -34,6 +34,9 @@ class SettingsDataStore(private val context: Context) {
     companion object {
         const val DEFAULT_TIMETABLE_URL = "https://plan.zsme.pl"
         const val DEFAULT_SUBSTITUTIONS_URL = "https://sekretariat.zsme.pl/tv.php"
+        const val DEFAULT_GITHUB_REPO = "dniesobski/ZSME-RoomMonitor"
+        const val DEFAULT_AUTO_REFRESH_MINUTES = 300
+        val ALLOWED_REFRESH_MINUTES = setOf(0, 10, 60, 300)
 
         val DEFAULT_FLOOR_LEVELS: List<FloorLevelConfig> = listOf(
             FloorLevelConfig("basement", "Piwnica", listOf("1-9")),
@@ -70,18 +73,25 @@ class SettingsDataStore(private val context: Context) {
         AppPreferences(
             timetableUrl = prefs[KEY_TIMETABLE_URL]?.takeIf { it.isNotBlank() } ?: DEFAULT_TIMETABLE_URL,
             substitutionsUrl = prefs[KEY_SUBSTITUTIONS_URL]?.takeIf { it.isNotBlank() } ?: DEFAULT_SUBSTITUTIONS_URL,
-            autoRefreshMinutes = prefs[KEY_AUTO_REFRESH_MINUTES] ?: 5,
+            autoRefreshMinutes = prefs[KEY_AUTO_REFRESH_MINUTES]
+                ?.takeIf { it in ALLOWED_REFRESH_MINUTES }
+                ?: DEFAULT_AUTO_REFRESH_MINUTES,
             cleanedRoomsForToday = cleanedRooms,
             floorLevels = floorLevels,
-            githubRepo = prefs[KEY_GITHUB_REPO]?.trim().orEmpty(),
+            githubRepo = prefs[KEY_GITHUB_REPO]?.takeIf { it.isNotBlank() } ?: DEFAULT_GITHUB_REPO,
             autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: true
         )
     }
 
     suspend fun updateGithubSettings(repo: String, autoCheck: Boolean) {
-        val normalized = com.example.update.GitHubUpdateManager.normalizeRepoSlug(repo) ?: repo.trim()
+        val trimmed = repo.trim()
+        val resolved = if (trimmed.isEmpty()) {
+            DEFAULT_GITHUB_REPO
+        } else {
+            com.example.update.GitHubUpdateManager.normalizeRepoSlug(trimmed) ?: trimmed
+        }
         context.dataStore.edit { prefs ->
-            prefs[KEY_GITHUB_REPO] = normalized
+            prefs[KEY_GITHUB_REPO] = resolved
             prefs[KEY_AUTO_CHECK_UPDATES] = autoCheck
         }
     }
@@ -89,10 +99,15 @@ class SettingsDataStore(private val context: Context) {
     suspend fun updateUrls(timetableUrl: String, substitutionsUrl: String, autoRefreshMinutes: Int) {
         val cleanTimetable = normalizeUrl(timetableUrl, DEFAULT_TIMETABLE_URL)
         val cleanSubstitutions = normalizeUrl(substitutionsUrl, DEFAULT_SUBSTITUTIONS_URL)
+        val safeRefreshMinutes = if (autoRefreshMinutes in ALLOWED_REFRESH_MINUTES) {
+            autoRefreshMinutes
+        } else {
+            DEFAULT_AUTO_REFRESH_MINUTES
+        }
         context.dataStore.edit { prefs ->
             prefs[KEY_TIMETABLE_URL] = cleanTimetable
             prefs[KEY_SUBSTITUTIONS_URL] = cleanSubstitutions
-            prefs[KEY_AUTO_REFRESH_MINUTES] = autoRefreshMinutes
+            prefs[KEY_AUTO_REFRESH_MINUTES] = safeRefreshMinutes
         }
     }
 

@@ -399,7 +399,7 @@ fun GitHubUpdateCard(
                 value = repoInput,
                 onValueChange = { repoInput = it },
                 label = { Text("Repozytorium GitHub") },
-                placeholder = { Text("np. uzytkownik/wolne-sale lub link https://github.com/...") },
+                placeholder = { Text("dniesobski/ZSME-RoomMonitor") },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()

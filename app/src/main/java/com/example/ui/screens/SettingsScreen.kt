@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -178,10 +179,17 @@ fun SettingsScreen(
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf(0 to "Wył.", 5 to "5 min", 10 to "10 min", 15 to "15 min").forEach { (mins, label) ->
+                        listOf(
+                            0 to "Wył.",
+                            10 to "10 min",
+                            60 to "1 godz",
+                            300 to "5 godz"
+                        ).forEach { (mins, label) ->
                             FilterChip(
                                 selected = selectedRefreshMinutes == mins,
                                 onClick = { selectedRefreshMinutes = mins },

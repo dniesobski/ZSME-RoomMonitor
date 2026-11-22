@@ -13,6 +13,10 @@ class GitHubUpdateTest {
     @Test
     fun `normalizes GitHub repository slugs and URLs accurately`() {
         assertEquals("zsme/wolne-sale", GitHubUpdateManager.normalizeRepoSlug("zsme/wolne-sale"))
+        assertEquals(
+            "dniesobski/ZSME-RoomMonitor",
+            GitHubUpdateManager.normalizeRepoSlug("https://github.com/dniesobski/ZSME-RoomMonitor")
+        )
         assertEquals("zsme/wolne-sale", GitHubUpdateManager.normalizeRepoSlug("https://github.com/zsme/wolne-sale"))
         assertEquals("zsme/wolne-sale", GitHubUpdateManager.normalizeRepoSlug("https://github.com/zsme/wolne-sale/releases/latest"))
         assertEquals("zsme/wolne-sale", GitHubUpdateManager.normalizeRepoSlug("github.com/zsme/wolne-sale.git"))

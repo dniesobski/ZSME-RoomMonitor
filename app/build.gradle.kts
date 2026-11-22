@@ -31,21 +31,14 @@ android {
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
   // and updating Android apps in AI Studio.
-  signingConfigs {
-    create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+ signingConfigs {
+        create("release") {
+            storeFile = file("../key.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "TWOJE_HASLO_DO_KEYSTORE"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "zsme_key"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "TWOJE_HASLO_DO_KLUCZA"
+        }
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
-  }
 
   buildTypes {
     release {

@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -54,7 +56,7 @@ data class MainUiState(
     val lastUpdatedText: String? = null,
     val timetableUrl: String = SettingsDataStore.DEFAULT_TIMETABLE_URL,
     val substitutionsUrl: String = SettingsDataStore.DEFAULT_SUBSTITUTIONS_URL,
-    val autoRefreshMinutes: Int = 5,
+    val autoRefreshMinutes: Int = SettingsDataStore.DEFAULT_AUTO_REFRESH_MINUTES,
     val floorLevels: List<FloorLevelConfig> = SettingsDataStore.DEFAULT_FLOOR_LEVELS,
     val selectedFloorLevelId: String? = null,
     val allKnownRoomNames: List<String> = emptyList(),
@@ -77,7 +79,7 @@ data class MainUiState(
     val selectedRoom: RoomDaySummary? = null,
     val settingsFeedback: String? = null,
     val currentAppVersion: String = BuildConfig.VERSION_NAME,
-    val githubRepo: String = "",
+    val githubRepo: String = SettingsDataStore.DEFAULT_GITHUB_REPO,
     val autoCheckUpdates: Boolean = true,
     val updateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
     val updateBannerDismissed: Boolean = false
@@ -242,17 +244,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startAutoRefreshLoop() {
         viewModelScope.launch {
-            while (true) {
-                val minutes = currentPrefs.autoRefreshMinutes
-                if (minutes > 0) {
-                    delay(minutes * 60_000L)
-                    if (!_uiState.value.isLoading && !_uiState.value.isRefreshing) {
-                        refreshData(isManual = false)
+            settingsStore.preferencesFlow
+                .map { it.autoRefreshMinutes }
+                .distinctUntilChanged()
+                .collectLatest { minutes ->
+                    if (minutes > 0) {
+                        while (true) {
+                            delay(minutes * 60_000L)
+                            if (!_uiState.value.isLoading && !_uiState.value.isRefreshing) {
+                                refreshData(isManual = false)
+                            }
+                        }
                     }
-                } else {
-                    delay(30_000L)
                 }
-            }
         }
     }
 
