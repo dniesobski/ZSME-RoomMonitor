@@ -3,6 +3,7 @@ package com.example.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.BuildConfig
 import com.example.data.AppPreferences
 import com.example.data.FetchedSchoolData
 import com.example.data.ScheduleAnalyzer
@@ -20,8 +21,13 @@ import com.example.model.PeriodTime
 import com.example.model.RoomAvailabilityStatus
 import com.example.model.RoomDaySummary
 import com.example.model.SubstitutionEntry
+import com.example.update.AppUpdateStatus
+import com.example.update.GitHubReleaseInfo
+import com.example.update.GitHubUpdateManager
 import com.example.util.SchoolDateInfo
 import com.example.util.TimeHelper
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,7 +75,12 @@ data class MainUiState(
     val onlyWithSubstitutions: Boolean = false,
     val hideCleanedRooms: Boolean = false,
     val selectedRoom: RoomDaySummary? = null,
-    val settingsFeedback: String? = null
+    val settingsFeedback: String? = null,
+    val currentAppVersion: String = BuildConfig.VERSION_NAME,
+    val githubRepo: String = "",
+    val autoCheckUpdates: Boolean = true,
+    val updateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
+    val updateBannerDismissed: Boolean = false
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -77,6 +88,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsStore = SettingsDataStore(application.applicationContext)
     private val cacheStore = ScheduleCacheStore(application.applicationContext)
     private val repository = TimetableRepository()
+    private val updateManager = GitHubUpdateManager()
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -85,6 +97,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var activeCache: ScheduleCacheData = ScheduleCacheData()
     private var currentPrefs = AppPreferences()
     private var lastFetchedUrls: Pair<String, String>? = null
+    private var hasAutoCheckedUpdates = false
+    private var downloadJob: Job? = null
 
     init {
         observePreferences()
@@ -111,7 +125,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         substitutionsUrl = prefs.substitutionsUrl,
                         autoRefreshMinutes = prefs.autoRefreshMinutes,
                         floorLevels = prefs.floorLevels,
-                        selectedFloorLevelId = validSelectedId
+                        selectedFloorLevelId = validSelectedId,
+                        githubRepo = prefs.githubRepo,
+                        autoCheckUpdates = prefs.autoCheckUpdates
                     )
                 }
                 if (urlsChanged) {
@@ -126,6 +142,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     refreshData(isManual = false)
                 } else {
                     recomputeFromCache()
+                }
+                if (!hasAutoCheckedUpdates && prefs.autoCheckUpdates && prefs.githubRepo.isNotBlank()) {
+                    hasAutoCheckedUpdates = true
+                    checkForUpdates(isManual = false)
                 }
             }
         }
@@ -622,5 +642,178 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             refreshData(isManual = true)
         }
+    }
+
+    fun saveGithubSettings(repoInput: String, autoCheck: Boolean) {
+        viewModelScope.launch {
+            settingsStore.updateGithubSettings(repoInput, autoCheck)
+            val normalized = GitHubUpdateManager.normalizeRepoSlug(repoInput)
+            _uiState.update {
+                it.copy(
+                    settingsFeedback = if (normalized != null) {
+                        "Zapisano repozytorium GitHub: $normalized"
+                    } else if (repoInput.isBlank()) {
+                        "Wyczyszczono adres repozytorium GitHub."
+                    } else {
+                        "Zapisano wpis, ale format powinien wyglądać jak właściciel/repozytorium."
+                    }
+                )
+            }
+        }
+    }
+
+    fun checkForUpdates(isManual: Boolean = true, repoOverride: String? = null) {
+        viewModelScope.launch {
+            val repoInput = (repoOverride ?: currentPrefs.githubRepo).trim()
+            if (repoInput.isBlank()) {
+                if (isManual) {
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = AppUpdateStatus.Error(
+                                "Podaj najpierw repozytorium GitHub (np. uzytkownik/wolne-sale)."
+                            )
+                        )
+                    }
+                }
+                return@launch
+            }
+
+            if (repoOverride != null && repoOverride.trim() != currentPrefs.githubRepo) {
+                settingsStore.updateGithubSettings(repoOverride, currentPrefs.autoCheckUpdates)
+            }
+
+            _uiState.update { it.copy(updateStatus = AppUpdateStatus.Checking) }
+
+            val result = updateManager.checkForUpdate(
+                repoInput = repoInput,
+                currentVersion = BuildConfig.VERSION_NAME
+            )
+
+            result.fold(
+                onSuccess = { outcome ->
+                    val release = outcome.latestRelease
+                    val nextStatus = when {
+                        outcome.isUpdateAvailable && release != null -> {
+                            AppUpdateStatus.UpdateAvailable(release)
+                        }
+                        else -> {
+                            AppUpdateStatus.UpToDate(
+                                currentVersion = BuildConfig.VERSION_NAME,
+                                latestTag = release?.tagName
+                            )
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = nextStatus,
+                            updateBannerDismissed = if (outcome.isUpdateAvailable) false else it.updateBannerDismissed
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    if (isManual) {
+                        _uiState.update {
+                            it.copy(
+                                updateStatus = AppUpdateStatus.Error(
+                                    error.localizedMessage ?: "Nie udało się sprawdzić aktualizacji na GitHubie."
+                                )
+                            )
+                        }
+                    } else {
+                        _uiState.update { it.copy(updateStatus = AppUpdateStatus.Idle) }
+                    }
+                }
+            )
+        }
+    }
+
+    fun downloadUpdate(release: GitHubReleaseInfo) {
+        val downloadUrl = release.apkDownloadUrl
+        if (downloadUrl.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    updateStatus = AppUpdateStatus.Error(
+                        "Wydanie ${release.tagName} nie zawiera załączonego pliku .apk. Otwórz stronę wydania w przeglądarce."
+                    )
+                )
+            }
+            return
+        }
+
+        downloadJob?.cancel()
+        downloadJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    updateStatus = AppUpdateStatus.Downloading(
+                        release = release,
+                        downloadedBytes = 0L,
+                        totalBytes = release.apkSizeBytes ?: -1L
+                    )
+                )
+            }
+
+            val result = updateManager.downloadApk(
+                downloadUrl = downloadUrl,
+                preferredFileName = release.apkAssetName ?: "wolne-sale-${release.tagName}.apk",
+                cacheDir = getApplication<Application>().cacheDir
+            ) { downloaded, total ->
+                _uiState.update { state ->
+                    if (state.updateStatus is AppUpdateStatus.Downloading) {
+                        state.copy(
+                            updateStatus = AppUpdateStatus.Downloading(
+                                release = release,
+                                downloadedBytes = downloaded,
+                                totalBytes = if (total > 0L) total else (release.apkSizeBytes ?: -1L)
+                            )
+                        )
+                    } else {
+                        state
+                    }
+                }
+            }
+
+            result.fold(
+                onSuccess = { apkFile ->
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = AppUpdateStatus.ReadyToInstall(
+                                release = release,
+                                apkFile = apkFile
+                            )
+                        )
+                    }
+                },
+                onFailure = { err ->
+                    if (err is CancellationException) {
+                        _uiState.update { it.copy(updateStatus = AppUpdateStatus.UpdateAvailable(release)) }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                updateStatus = AppUpdateStatus.Error(
+                                    err.localizedMessage ?: "Nie udało się pobrać pliku APK."
+                                )
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    fun cancelUpdateDownload() {
+        val current = _uiState.value.updateStatus
+        downloadJob?.cancel()
+        downloadJob = null
+        if (current is AppUpdateStatus.Downloading) {
+            _uiState.update { it.copy(updateStatus = AppUpdateStatus.UpdateAvailable(current.release)) }
+        }
+    }
+
+    fun dismissUpdateBanner() {
+        _uiState.update { it.copy(updateBannerDismissed = true) }
+    }
+
+    fun reportUpdateError(message: String) {
+        _uiState.update { it.copy(updateStatus = AppUpdateStatus.Error(message)) }
     }
 }

@@ -3,6 +3,7 @@ package com.example.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,7 +24,9 @@ data class AppPreferences(
     val substitutionsUrl: String = SettingsDataStore.DEFAULT_SUBSTITUTIONS_URL,
     val autoRefreshMinutes: Int = 5,
     val cleanedRoomsForToday: Set<String> = emptySet(),
-    val floorLevels: List<FloorLevelConfig> = SettingsDataStore.DEFAULT_FLOOR_LEVELS
+    val floorLevels: List<FloorLevelConfig> = SettingsDataStore.DEFAULT_FLOOR_LEVELS,
+    val githubRepo: String = "",
+    val autoCheckUpdates: Boolean = true
 )
 
 class SettingsDataStore(private val context: Context) {
@@ -47,6 +50,8 @@ class SettingsDataStore(private val context: Context) {
         private val KEY_CLEANED_ROOMS_DATE = stringPreferencesKey("cleaned_rooms_date")
         private val KEY_CLEANED_ROOMS_SET = stringSetPreferencesKey("cleaned_rooms_set")
         private val KEY_FLOOR_LEVELS_JSON = stringPreferencesKey("floor_levels_json")
+        private val KEY_GITHUB_REPO = stringPreferencesKey("github_repo")
+        private val KEY_AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
     }
 
     val preferencesFlow: Flow<AppPreferences> = context.dataStore.data.map { prefs ->
@@ -67,8 +72,18 @@ class SettingsDataStore(private val context: Context) {
             substitutionsUrl = prefs[KEY_SUBSTITUTIONS_URL]?.takeIf { it.isNotBlank() } ?: DEFAULT_SUBSTITUTIONS_URL,
             autoRefreshMinutes = prefs[KEY_AUTO_REFRESH_MINUTES] ?: 5,
             cleanedRoomsForToday = cleanedRooms,
-            floorLevels = floorLevels
+            floorLevels = floorLevels,
+            githubRepo = prefs[KEY_GITHUB_REPO]?.trim().orEmpty(),
+            autoCheckUpdates = prefs[KEY_AUTO_CHECK_UPDATES] ?: true
         )
+    }
+
+    suspend fun updateGithubSettings(repo: String, autoCheck: Boolean) {
+        val normalized = com.example.update.GitHubUpdateManager.normalizeRepoSlug(repo) ?: repo.trim()
+        context.dataStore.edit { prefs ->
+            prefs[KEY_GITHUB_REPO] = normalized
+            prefs[KEY_AUTO_CHECK_UPDATES] = autoCheck
+        }
     }
 
     suspend fun updateUrls(timetableUrl: String, substitutionsUrl: String, autoRefreshMinutes: Int) {

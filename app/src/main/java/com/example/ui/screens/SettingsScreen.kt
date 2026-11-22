@@ -57,6 +57,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.model.FloorLevelConfig
 import com.example.model.FloorLevelMatcher
+import com.example.ui.components.GitHubUpdateCard
+import com.example.update.GitHubReleaseInfo
 import com.example.util.TimeHelper
 import com.example.viewmodel.MainUiState
 
@@ -74,6 +76,11 @@ fun SettingsScreen(
     onAddRoomRuleToLevel: (levelId: String, rule: String) -> Unit,
     onRemoveRoomRuleFromLevel: (levelId: String, rule: String) -> Unit,
     onResetDefaultFloorLevels: () -> Unit,
+    onSaveGithubSettings: (repo: String, autoCheck: Boolean) -> Unit,
+    onCheckForUpdates: (repoOverride: String) -> Unit,
+    onDownloadUpdate: (GitHubReleaseInfo) -> Unit,
+    onCancelUpdateDownload: () -> Unit,
+    onUpdateInstallError: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var timetableUrlInput by remember { mutableStateOf(state.timetableUrl) }
@@ -102,11 +109,25 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.headlineLarge
                 )
                 Text(
-                    text = "Konfiguracja źródeł danych oraz poziomów i sal",
+                    text = "Konfiguracja źródeł danych, poziomów oraz aktualizacji",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+
+        item(key = "github_update_card") {
+            GitHubUpdateCard(
+                currentVersion = state.currentAppVersion,
+                githubRepo = state.githubRepo,
+                autoCheckUpdates = state.autoCheckUpdates,
+                updateStatus = state.updateStatus,
+                onSaveGithubSettings = onSaveGithubSettings,
+                onCheckForUpdates = onCheckForUpdates,
+                onDownloadUpdate = onDownloadUpdate,
+                onCancelDownload = onCancelUpdateDownload,
+                onInstallError = onUpdateInstallError
+            )
         }
 
         item(key = "url_card") {

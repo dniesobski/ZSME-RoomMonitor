@@ -196,7 +196,11 @@ fun WolneSaleApp(viewModel: MainViewModel = viewModel()) {
                             onToggleHideCleanedRooms = viewModel::toggleHideCleanedRooms,
                             onToggleRoomCleaned = viewModel::toggleRoomCleaned,
                             onOpenRoomDetails = viewModel::openRoomDetails,
-                            onNavigateToSettings = { navigateTo(ROUTE_SETTINGS) }
+                            onNavigateToSettings = { navigateTo(ROUTE_SETTINGS) },
+                            onDownloadUpdate = viewModel::downloadUpdate,
+                            onCancelUpdateDownload = viewModel::cancelUpdateDownload,
+                            onUpdateInstallError = viewModel::reportUpdateError,
+                            onDismissUpdateBanner = viewModel::dismissUpdateBanner
                         )
                     }
 
@@ -221,7 +225,14 @@ fun WolneSaleApp(viewModel: MainViewModel = viewModel()) {
                             onDeleteFloorLevel = viewModel::deleteFloorLevel,
                             onAddRoomRuleToLevel = viewModel::addRuleToFloorLevel,
                             onRemoveRoomRuleFromLevel = viewModel::removeRuleFromFloorLevel,
-                            onResetDefaultFloorLevels = viewModel::resetDefaultFloorLevels
+                            onResetDefaultFloorLevels = viewModel::resetDefaultFloorLevels,
+                            onSaveGithubSettings = viewModel::saveGithubSettings,
+                            onCheckForUpdates = { repoOverride ->
+                                viewModel.checkForUpdates(isManual = true, repoOverride = repoOverride)
+                            },
+                            onDownloadUpdate = viewModel::downloadUpdate,
+                            onCancelUpdateDownload = viewModel::cancelUpdateDownload,
+                            onUpdateInstallError = viewModel::reportUpdateError
                         )
                     }
                 }

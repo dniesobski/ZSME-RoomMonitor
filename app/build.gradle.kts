@@ -8,6 +8,10 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+val ciRunNumber = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull
+  ?.takeIf { it.isNotBlank() }
+  ?: providers.gradleProperty("ciRunNumber").orNull?.takeIf { it.isNotBlank() }
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }

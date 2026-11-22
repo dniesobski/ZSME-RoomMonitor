@@ -57,7 +57,9 @@ import com.example.model.RoomDaySummary
 import com.example.ui.components.ClockHeroBanner
 import com.example.ui.components.FreeRoomCard
 import com.example.ui.components.FreeSoonRoomCard
+import com.example.ui.components.HomeUpdateBanner
 import com.example.ui.components.RoomDetailBottomSheet
+import com.example.update.GitHubReleaseInfo
 import com.example.viewmodel.FLOOR_ID_OTHER
 import com.example.viewmodel.MainUiState
 
@@ -72,6 +74,10 @@ fun HomeScreen(
     onToggleRoomCleaned: (String) -> Unit,
     onOpenRoomDetails: (RoomDaySummary?) -> Unit,
     onNavigateToSettings: () -> Unit,
+    onDownloadUpdate: (GitHubReleaseInfo) -> Unit,
+    onCancelUpdateDownload: () -> Unit,
+    onUpdateInstallError: (String) -> Unit,
+    onDismissUpdateBanner: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showOccupiedSection by remember { mutableStateOf(false) }
@@ -99,6 +105,18 @@ fun HomeScreen(
                     lastUpdatedText = state.lastUpdatedText,
                     isRefreshing = state.isRefreshing || state.isLoading,
                     onRefreshClick = onRefresh
+                )
+            }
+
+            item(key = "app_update_banner") {
+                HomeUpdateBanner(
+                    status = state.updateStatus,
+                    currentVersion = state.currentAppVersion,
+                    dismissed = state.updateBannerDismissed,
+                    onDownload = onDownloadUpdate,
+                    onCancelDownload = onCancelUpdateDownload,
+                    onInstallError = onUpdateInstallError,
+                    onDismiss = onDismissUpdateBanner
                 )
             }
 
