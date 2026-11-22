@@ -49,4 +49,4 @@ jobs:
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Aktualizacja #${{ github.run_number }}
-          files: ZSMEAssist.apk
+          files: ZSMERoomMonitor.apk
